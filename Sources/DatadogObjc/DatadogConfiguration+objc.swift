@@ -154,6 +154,13 @@ public class DDConfigurationBuilder: NSObject {
         _ = sdkBuilder.enableRUM(enabled)
     }
 
+#if DD_SDK_ENABLE_EXPERIMENTAL_APIS
+    @objc
+    public func enableCrashReporting(using crashReportingPlugin: DDCrashReportingPluginType) {
+        _ = sdkBuilder.enableCrashReporting(using: crashReportingPlugin)
+    }
+#endif
+
     @objc
     public func set(endpoint: DDEndpoint) {
         _ = sdkBuilder.set(endpoint: endpoint.sdkEndpoint)
@@ -231,10 +238,10 @@ public class DDConfigurationBuilder: NSObject {
     }
 
     @objc
-    public func setRUMViewEventMapper(_ mapper: @escaping (DDRUMViewEvent) -> DDRUMViewEvent?) {
+    public func setRUMViewEventMapper(_ mapper: @escaping (DDRUMViewEvent) -> DDRUMViewEvent) {
         _ = sdkBuilder.setRUMViewEventMapper { swiftEvent in
             let objcEvent = DDRUMViewEvent(swiftModel: swiftEvent)
-            return mapper(objcEvent)?.swiftModel
+            return mapper(objcEvent).swiftModel
         }
     }
 
@@ -270,6 +277,11 @@ public class DDConfigurationBuilder: NSObject {
     @objc
     public func set(uploadFrequency: DDUploadFrequency) {
         _ = sdkBuilder.set(uploadFrequency: uploadFrequency.swiftType)
+    }
+
+    @objc
+    public func set(additionalConfiguration: [String: Any]) {
+        _ = sdkBuilder.set(additionalConfiguration: additionalConfiguration)
     }
 
     @objc

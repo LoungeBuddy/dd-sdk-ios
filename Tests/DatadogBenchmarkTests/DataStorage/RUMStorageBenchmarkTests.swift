@@ -24,12 +24,6 @@ class RUMStorageBenchmarkTests: XCTestCase {
                 unauthorized: obtainUniqueTemporaryDirectory(),
                 authorized: directory
             ),
-            eventMapper: RUMEventsMapper(
-                viewEventMapper: nil,
-                errorEventMapper: nil,
-                resourceEventMapper: nil,
-                actionEventMapper: nil
-            ),
             commonDependencies: .mockAny()
         )
         self.writer = storage.writer
@@ -99,6 +93,7 @@ class RUMStorageBenchmarkTests: XCTestCase {
                     action: .init(count: .mockAny()),
                     crash: .init(count: .mockAny()),
                     cumulativeLayoutShift: nil,
+                    customTimings: .mockAny(),
                     domComplete: nil,
                     domContentLoaded: nil,
                     domInteractive: nil,
@@ -120,8 +115,7 @@ class RUMStorageBenchmarkTests: XCTestCase {
                 )
             ),
             attributes: ["attribute": "value"],
-            userInfoAttributes: ["str": "value", "int": 11_235, "bool": true],
-            customViewTimings: nil
+            userInfoAttributes: ["str": "value", "int": 11_235, "bool": true]
         )
     }
 }

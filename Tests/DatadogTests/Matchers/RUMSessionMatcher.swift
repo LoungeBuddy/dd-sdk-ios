@@ -46,8 +46,12 @@ internal class RUMSessionMatcher {
             self.viewID = viewID
         }
 
+        /// The `name` of the visited RUM View.
+        /// Corresponds to the "VIEW NAME" in RUM Explorer.
+        fileprivate(set) var name: String = ""
+
         /// The `path` of the visited RUM View.
-        /// Corresponds to the "PATH GROUP" in RUM Explorer.
+        /// Corresponds to the "VIEW URL" in RUM Explorer.
         fileprivate(set) var path: String = ""
 
         /// `RUMView` events tracked during this visit.
@@ -70,6 +74,11 @@ internal class RUMSessionMatcher {
     /// Each `ViewVisit` is determined by unique `view.id` and groups all RUM events linked to that `view.id`.
     let viewVisits: [ViewVisit]
 
+    let viewEventMatchers: [RUMEventMatcher]
+    let actionEventMatchers: [RUMEventMatcher]
+    let resourceEventMatchers: [RUMEventMatcher]
+    let errorEventMatchers: [RUMEventMatcher]
+
     private init(sessionEventMatchers: [RUMEventMatcher]) throws {
         // Sort events so they follow increasing time order
         let sessionEventOrderedByTime = try sessionEventMatchers.sorted { firstEvent, secondEvent in
@@ -84,16 +93,20 @@ internal class RUMSessionMatcher {
 
         // Get RUM Events by kind:
 
-        let viewEventMatchers = eventsMatchersByType["view"] ?? []
+        self.viewEventMatchers = eventsMatchersByType["view"] ?? []
+        self.actionEventMatchers = eventsMatchersByType["action"] ?? []
+        self.resourceEventMatchers = eventsMatchersByType["resource"] ?? []
+        self.errorEventMatchers = eventsMatchersByType["error"] ?? []
+
         let viewEvents: [RUMViewEvent] = try viewEventMatchers.map { matcher in try matcher.model() }
 
-        let actionEvents: [RUMActionEvent] = try (eventsMatchersByType["action"] ?? [])
+        let actionEvents: [RUMActionEvent] = try actionEventMatchers
             .map { matcher in try matcher.model() }
 
-        let resourceEvents: [RUMResourceEvent] = try (eventsMatchersByType["resource"] ?? [])
+        let resourceEvents: [RUMResourceEvent] = try resourceEventMatchers
             .map { matcher in try matcher.model() }
 
-        let errorEvents: [RUMErrorEvent] = try (eventsMatchersByType["error"] ?? [])
+        let errorEvents: [RUMErrorEvent] = try errorEventMatchers
             .map { matcher in try matcher.model() }
 
         // Validate each group of events individually
@@ -111,6 +124,13 @@ internal class RUMSessionMatcher {
             if let visit = visitsByViewID[rumEvent.view.id] {
                 visit.viewEvents.append(rumEvent)
                 visit.viewEventMatchers.append(matcher)
+                if visit.name.isEmpty {
+                    visit.name = rumEvent.view.name!
+                } else if visit.name != rumEvent.view.name {
+                    throw RUMSessionConsistencyException(
+                        description: "The RUM View name: \(rumEvent) is different than other RUM View names for the same `view.id`."
+                    )
+                }
                 if visit.path.isEmpty {
                     visit.path = rumEvent.view.url
                 } else if visit.path != rumEvent.view.url {

@@ -33,7 +33,8 @@ class TracerTests: XCTestCase {
                     applicationVersion: "1.0.0",
                     applicationBundleIdentifier: "com.datadoghq.ios-sdk",
                     serviceName: "default-service-name",
-                    environment: "custom"
+                    environment: "custom",
+                    source: "abc"
                 )
             ),
             dependencies: .mockWith(
@@ -65,7 +66,7 @@ class TracerTests: XCTestCase {
               "type": "custom",
               "meta.tracer.version": "\(sdkVersion)",
               "meta.version": "1.0.0",
-              "meta._dd.source": "ios",
+              "meta._dd.source": "abc",
               "metrics._top_level": 1,
               "metrics._sampling_priority_v1": 1
             }
@@ -332,9 +333,11 @@ class TracerTests: XCTestCase {
         let tracer = Tracer.initialize(configuration: .init()).dd
 
         tracer.startSpan(operationName: "span with no user info").finish()
+        tracer.queue.sync {} // wait for processing the span event in `DDSpan`
 
         Datadog.setUserInfo(id: "abc-123", name: "Foo")
         tracer.startSpan(operationName: "span with user `id` and `name`").finish()
+        tracer.queue.sync {}
 
         Datadog.setUserInfo(
             id: "abc-123",
@@ -347,6 +350,7 @@ class TracerTests: XCTestCase {
             ]
         )
         tracer.startSpan(operationName: "span with user `id`, `name`, `email` and `extraInfo`").finish()
+        tracer.queue.sync {}
 
         Datadog.setUserInfo(id: nil, name: nil, email: nil)
         tracer.startSpan(operationName: "span with no user info").finish()
@@ -399,6 +403,7 @@ class TracerTests: XCTestCase {
         )
 
         tracer.startSpan(operationName: "span with carrier info").finish()
+        tracer.queue.sync {} // wait for processing the span event in `DDSpan`
 
         // simulate leaving cellular service range
         carrierInfoProvider.set(current: nil)
@@ -446,6 +451,7 @@ class TracerTests: XCTestCase {
         )
 
         tracer.startSpan(operationName: "online span").finish()
+        tracer.queue.sync {} // wait for processing the span event in `DDSpan`
 
         // simulate unreachable network
         networkConnectionInfoProvider.set(
@@ -583,7 +589,7 @@ class TracerTests: XCTestCase {
         )
         XCTAssertEqual(
             try spanMatcher.meta.custom(keyPath: "meta.person"),
-            #"{"age":30,"name":"Adam","nationality":"Polish"}"#
+            #"{"name":"Adam","age":30,"nationality":"Polish"}"#
         )
         XCTAssertEqual(try spanMatcher.meta.custom(keyPath: "meta.nested.string"), "hello")
         XCTAssertEqual(try spanMatcher.meta.custom(keyPath: "meta.url"), "https://example.com/image.png")
@@ -629,6 +635,7 @@ class TracerTests: XCTestCase {
         errorLogMatcher.assertStatus(equals: "error")
         errorLogMatcher.assertValue(forKey: "event", equals: "error")
         errorLogMatcher.assertValue(forKey: "error.kind", equals: "Swift error")
+        errorLogMatcher.assertValue(forKey: "error.message", equals: "Ops!")
         errorLogMatcher.assertMessage(equals: "Ops!")
         errorLogMatcher.assertValue(forKey: "dd.trace_id", equals: "\(span.context.dd.traceID.rawValue)")
         errorLogMatcher.assertValue(forKey: "dd.span_id", equals: "\(span.context.dd.spanID.rawValue)")
@@ -664,6 +671,7 @@ class TracerTests: XCTestCase {
         errorLogMatcher.assertStatus(equals: "error")
         errorLogMatcher.assertValue(forKey: "event", equals: "error")
         errorLogMatcher.assertValue(forKey: "error.kind", equals: "Swift error")
+        errorLogMatcher.assertValue(forKey: "error.message", equals: "Ops!")
         errorLogMatcher.assertMessage(equals: "Ops!")
         errorLogMatcher.assertValue(forKey: "dd.trace_id", equals: "\(span.context.dd.traceID.rawValue)")
         errorLogMatcher.assertValue(forKey: "dd.span_id", equals: "\(span.context.dd.spanID.rawValue)")
@@ -705,6 +713,7 @@ class TracerTests: XCTestCase {
         errorLogMatcher.assertStatus(equals: "error")
         errorLogMatcher.assertValue(forKey: "event", equals: "error")
         errorLogMatcher.assertValue(forKey: "error.kind", equals: "Tracer - 1")
+        errorLogMatcher.assertValue(forKey: "error.message", equals: "Ops!")
         errorLogMatcher.assertMessage(equals: "Ops!")
         errorLogMatcher.assertValue(forKey: "dd.trace_id", equals: "\(span.context.dd.traceID.rawValue)")
         errorLogMatcher.assertValue(forKey: "dd.span_id", equals: "\(span.context.dd.spanID.rawValue)")
@@ -741,6 +750,7 @@ class TracerTests: XCTestCase {
         errorLogMatcher.assertStatus(equals: "error")
         errorLogMatcher.assertValue(forKey: "event", equals: "error")
         errorLogMatcher.assertValue(forKey: "error.kind", equals: "ErrorMock")
+        errorLogMatcher.assertValue(forKey: "error.message", equals: "Ops!")
         errorLogMatcher.assertMessage(equals: "Ops!")
         errorLogMatcher.assertValue(forKey: "dd.trace_id", equals: "\(span.context.dd.traceID.rawValue)")
         errorLogMatcher.assertValue(forKey: "dd.span_id", equals: "\(span.context.dd.spanID.rawValue)")
@@ -797,7 +807,7 @@ class TracerTests: XCTestCase {
         span.finish()
 
         // then
-        XCTAssertEqual(output.recordedLog?.level, .warn)
+        XCTAssertEqual(output.recordedLog?.status, .warn)
         try XCTAssertTrue(
             XCTUnwrap(output.recordedLog?.message)
                 .contains("RUM feature is enabled, but no `RUMMonitor` is registered. The RUM integration with Tracing will not work.")
@@ -892,14 +902,20 @@ class TracerTests: XCTestCase {
         )
         defer { TracingFeature.instance = nil }
 
-        let tracer = Tracer.initialize(configuration: .init())
+        let tracer = Tracer.initialize(configuration: .init()).dd
 
         // When
         tracer.startSpan(operationName: "span in `.pending` consent changed to `.granted`").finish()
+        tracer.queue.sync {} // wait for processing the span event in `DDSpan`
+
         consentProvider.changeConsent(to: .granted)
         tracer.startSpan(operationName: "span in `.granted` consent").finish()
+        tracer.queue.sync {}
+
         consentProvider.changeConsent(to: .notGranted)
         tracer.startSpan(operationName: "span in `.notGranted` consent").finish()
+        tracer.queue.sync {}
+
         consentProvider.changeConsent(to: .granted)
         tracer.startSpan(operationName: "another span in `.granted` consent").finish()
 
@@ -949,30 +965,6 @@ class TracerTests: XCTestCase {
                 // swiftlint:enable opening_brace
             ]
         )
-    }
-
-    func testWhenSpanStateChangesFromDifferentThreads_itChangesSpanState() {
-        TracingFeature.instance = .mockNoOp()
-        defer { TracingFeature.instance = nil }
-        let tracer = Tracer.initialize(configuration: .init())
-        let span = tracer.startSpan(operationName: "some span", childOf: nil).dd
-
-        let closures: [(DDSpan) -> Void] = [
-            // swiftlint:disable opening_brace
-            { span in span.setTag(key: .mockRandom(), value: "value") },
-            { span in span.setBaggageItem(key: .mockRandom(), value: "value") },
-            { span in _ = span.baggageItem(withKey: .mockRandom()) },
-            { span in _ = span.context.forEachBaggageItem { _, _ in return false } },
-            { span in span.log(fields: [.mockRandom(): "value"]) }
-            // swiftlint:enable opening_brace
-        ]
-        /// Calls given closures on each span cuncurrently
-        let iterations = 100
-        DispatchQueue.concurrentPerform(iterations: iterations) { iteration in
-            closures.forEach { $0(span) }
-        }
-        XCTAssertEqual(span.tags.count, iterations)
-        XCTAssertEqual(span.logFields.count, iterations)
     }
 
     // MARK: - Usage errors
@@ -1042,7 +1034,8 @@ class TracerTests: XCTestCase {
         span.log(fields: ["bar": "bizz"])
 
         // then
-        XCTAssertEqual(output.recordedLog?.level, .warn)
+        tracer.dd.queue.sync {} // wait synchronizing span's internal state
+        XCTAssertEqual(output.recordedLog?.status, .warn)
         XCTAssertEqual(output.recordedLog?.message, "The log for span \"foo\" will not be send, because the Logging feature is disabled.")
 
         try Datadog.deinitializeOrThrow()
@@ -1097,7 +1090,7 @@ class TracerTests: XCTestCase {
 
         // Then
         tracingHandler.notify_taskInterceptionCompleted(interception: TaskInterception(request: .mockAny(), isFirstParty: true))
-        XCTAssertEqual(output.recordedLog?.level, .warn)
+        XCTAssertEqual(output.recordedLog?.status, .warn)
         XCTAssertEqual(
             output.recordedLog?.message,
             """

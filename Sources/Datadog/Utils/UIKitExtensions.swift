@@ -16,3 +16,18 @@ internal extension UIApplication {
             .value(forKeyPath: #keyPath(UIApplication.shared)) as? UIApplication // swiftlint:disable:this unsafe_uiapplication_shared
     }
 }
+
+internal extension UIViewController {
+    /// The canonical class name for this view controller.
+    /// If this `UIViewController` class is defined in Swift module, it will be prefixed by the module name, e.g. `Foo.CheckoutViewController`. 
+    var canonicalClassName: String {
+        return NSStringFromClass(type(of: self))
+    }
+}
+
+internal extension Bundle {
+    var isUIKit: Bool {
+        return bundleURL.lastPathComponent == "UIKitCore.framework" // on iOS 12+
+            || bundleURL.lastPathComponent == "UIKit.framework" // on iOS 11
+    }
+}

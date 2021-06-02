@@ -12,6 +12,7 @@ extension RUMViewEvent: EquatableInTests {}
 extension RUMResourceEvent: EquatableInTests {}
 extension RUMActionEvent: EquatableInTests {}
 extension RUMErrorEvent: EquatableInTests {}
+extension RUMEvent: EquatableInTests {}
 
 extension RUMUser {
     static func mockRandom() -> RUMUser {
@@ -60,6 +61,7 @@ extension RUMViewEvent {
                 action: .init(count: .mockRandom()),
                 crash: .init(count: .mockRandom()),
                 cumulativeLayoutShift: .mockRandom(),
+                customTimings: .mockAny(),
                 domComplete: .mockRandom(),
                 domContentLoaded: .mockRandom(),
                 domInteractive: .mockRandom(),
@@ -74,6 +76,7 @@ extension RUMViewEvent {
                 loadingTime: .mockRandom(),
                 loadingType: nil,
                 longTask: .init(count: .mockRandom()),
+                name: .mockRandom(),
                 referrer: .mockRandom(),
                 resource: .init(count: .mockRandom()),
                 timeSpent: .mockRandom(),

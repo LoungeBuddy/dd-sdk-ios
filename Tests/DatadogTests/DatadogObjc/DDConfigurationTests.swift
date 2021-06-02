@@ -47,6 +47,7 @@ class DDConfigurationTests: XCTestCase {
             XCTAssertEqual(configuration.clientToken, "abc-123")
             XCTAssertTrue(configuration.loggingEnabled)
             XCTAssertTrue(configuration.tracingEnabled)
+            XCTAssertNil(configuration.crashReportingPlugin)
             XCTAssertEqual(configuration.logsEndpoint, .us)
             XCTAssertEqual(configuration.tracesEndpoint, .us)
             XCTAssertEqual(configuration.rumEndpoint, .us)
@@ -62,6 +63,7 @@ class DDConfigurationTests: XCTestCase {
             XCTAssertNil(configuration.rumResourceEventMapper)
             XCTAssertNil(configuration.rumActionEventMapper)
             XCTAssertNil(configuration.rumErrorEventMapper)
+            XCTAssertEqual(configuration.additionalConfiguration.count, 0)
         }
     }
 
@@ -79,6 +81,15 @@ class DDConfigurationTests: XCTestCase {
 
         objcBuilder.enableRUM(false)
         XCTAssertFalse(objcBuilder.build().sdkConfiguration.rumEnabled)
+
+        class CrashReportingPluginMock: NSObject, DDCrashReportingPluginType {
+            func readPendingCrashReport(completion: (DDCrashReport?) -> Bool) {}
+            func inject(context: Data) {}
+        }
+
+        let crashReportingPlugin = CrashReportingPluginMock()
+        objcBuilder.enableCrashReporting(using: crashReportingPlugin)
+        XCTAssertTrue(objcBuilder.build().sdkConfiguration.crashReportingPlugin === crashReportingPlugin)
 
         objcBuilder.set(endpoint: .eu())
         XCTAssertEqual(objcBuilder.build().sdkConfiguration.datadogEndpoint, .eu)
@@ -123,7 +134,7 @@ class DDConfigurationTests: XCTestCase {
         objcBuilder.set(rumSessionsSamplingRate: 42.5)
         XCTAssertEqual(objcBuilder.build().sdkConfiguration.rumSessionsSamplingRate, 42.5)
 
-        objcBuilder.setRUMViewEventMapper { _ in nil }
+        objcBuilder.setRUMViewEventMapper { $0 }
         XCTAssertNotNil(objcBuilder.build().sdkConfiguration.rumViewEventMapper)
 
         objcBuilder.setRUMResourceEventMapper { _ in nil }
@@ -146,6 +157,10 @@ class DDConfigurationTests: XCTestCase {
 
         objcBuilder.set(uploadFrequency: .rare)
         XCTAssertEqual(objcBuilder.build().sdkConfiguration.uploadFrequency, .rare)
+
+        objcBuilder.set(additionalConfiguration: ["foo": 42, "bar": "something"])
+        XCTAssertEqual(objcBuilder.build().sdkConfiguration.additionalConfiguration["foo"] as? Int, 42)
+        XCTAssertEqual(objcBuilder.build().sdkConfiguration.additionalConfiguration["bar"] as? String, "something")
     }
 
     func testScrubbingRUMEvents() {
@@ -212,14 +227,12 @@ class DDConfigurationTests: XCTestCase {
             environment: "tests"
         )
 
-        objcBuilder.setRUMViewEventMapper { _ in nil }
         objcBuilder.setRUMResourceEventMapper { _ in nil }
         objcBuilder.setRUMActionEventMapper { _ in nil }
         objcBuilder.setRUMErrorEventMapper { _ in nil }
 
         let configuration = objcBuilder.build().sdkConfiguration
 
-        XCTAssertNil(configuration.rumViewEventMapper?(.mockRandom()))
         XCTAssertNil(configuration.rumResourceEventMapper?(.mockRandom()))
         XCTAssertNil(configuration.rumActionEventMapper?(.mockRandom()))
         XCTAssertNil(configuration.rumErrorEventMapper?(.mockRandom()))

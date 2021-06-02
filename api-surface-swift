@@ -4,10 +4,16 @@ public enum TrackingConsent
  case granted
  case notGranted
  case pending
+public class DDCrashReport: NSObject
+ public init(date: Date?,type: String,message: String,stackTrace: String,context: Data?)
+public protocol DDCrashReportingPluginType: class
+ func readPendingCrashReport(completion: (DDCrashReport?) -> Bool)
+ func inject(context: Data)
 public class DDRUMMonitor
- public func startView(viewController: UIViewController,path: String? = nil,attributes: [AttributeKey: AttributeValue] = [:])
+ public func startView(viewController: UIViewController,path: String?,attributes: [AttributeKey: AttributeValue] = [:])
+ public func startView(viewController: UIViewController,name: String? = nil,attributes: [AttributeKey: AttributeValue] = [:])
  public func stopView(viewController: UIViewController,attributes: [AttributeKey: AttributeValue] = [:])
- public func startView(key: String,path: String? = nil,attributes: [AttributeKey: AttributeValue] = [:])
+ public func startView(key: String,name: String? = nil,attributes: [AttributeKey: AttributeValue] = [:])
  public func stopView(key: String,attributes: [AttributeKey: AttributeValue] = [:])
  public func addTiming(name: String)
  public func addError(message: String,source: RUMErrorSource = .custom,stack: String? = nil,attributes: [AttributeKey: AttributeValue] = [:],file: StaticString? = #file,line: UInt? = #line)
@@ -16,6 +22,7 @@ public class DDRUMMonitor
  public func startResourceLoading(resourceKey: String,url: URL,attributes: [AttributeKey: AttributeValue] = [:])
  public func startResourceLoading(resourceKey: String,httpMethod: RUMMethod,urlString: String,attributes: [AttributeKey: AttributeValue] = [:])
  public func addResourceMetrics(resourceKey: String,metrics: URLSessionTaskMetrics,attributes: [AttributeKey: AttributeValue] = [:])
+ public func addResourceMetrics(resourceKey: String,fetch: (start: Date, end: Date),redirection: (start: Date, end: Date)?,dns: (start: Date, end: Date)?,connect: (start: Date, end: Date)?,ssl: (start: Date, end: Date)?,firstByte: (start: Date, end: Date)?,download: (start: Date, end: Date)?,responseSize: Int64?,attributes: [AttributeKey: AttributeValue] = [:])
  public func stopResourceLoading(resourceKey: String,response: URLResponse,size: Int64? = nil,attributes: [AttributeKey: AttributeValue] = [:])
  public func stopResourceLoading(resourceKey: String,statusCode: Int?,kind: RUMResourceType,size: Int64? = nil,attributes: [AttributeKey: AttributeValue] = [:])
  public func stopResourceLoadingWithError(resourceKey: String,error: Error,response: URLResponse? = nil,attributes: [AttributeKey: AttributeValue] = [:])
@@ -81,10 +88,12 @@ public class Datadog
    public func set(rumSessionsSamplingRate: Float) -> Builder
    public func trackUIKitRUMViews(using predicate: UIKitRUMViewsPredicate = DefaultUIKitRUMViewsPredicate()) -> Builder
    public func trackUIKitActions(_ enabled: Bool = true) -> Builder
-   public func setRUMViewEventMapper(_ mapper: @escaping (RUMViewEvent) -> RUMViewEvent?) -> Builder
+   public func setRUMViewEventMapper(_ mapper: @escaping (RUMViewEvent) -> RUMViewEvent) -> Builder
    public func setRUMResourceEventMapper(_ mapper: @escaping (RUMResourceEvent) -> RUMResourceEvent?) -> Builder
    public func setRUMActionEventMapper(_ mapper: @escaping (RUMActionEvent) -> RUMActionEvent?) -> Builder
    public func setRUMErrorEventMapper(_ mapper: @escaping (RUMErrorEvent) -> RUMErrorEvent?) -> Builder
+   public func enableCrashReporting(using crashReportingPlugin: DDCrashReportingPluginType) -> Builder
+   public func enableInternalMonitoring(clientToken: String) -> Builder
    public func set(serviceName: String) -> Builder
    public func set(batchSize: BatchSize) -> Builder
    public func set(uploadFrequency: UploadFrequency) -> Builder
@@ -199,9 +208,11 @@ public extension OTTracer
  func startSpan(operationName: String,childOf parent: OTSpanContext? = nil,tags: [String: Encodable]? = nil,startTime: Date? = nil) -> OTSpan
  func startRootSpan(operationName: String,tags: [String: Encodable]? = nil,startTime: Date? = nil) -> OTSpan
 public struct RUMView
- public var path: String
+ public var name: String
+ public var path: String?
  public var attributes: [AttributeKey: AttributeValue]
  public init(path: String, attributes: [AttributeKey: AttributeValue] = [:])
+ public init(name: String, attributes: [AttributeKey: AttributeValue] = [:])
 public protocol UIKitRUMViewsPredicate
  func rumView(for viewController: UIViewController) -> RUMView?
 public struct DefaultUIKitRUMViewsPredicate: UIKitRUMViewsPredicate
@@ -233,6 +244,7 @@ public struct RUMViewEvent: RUMDataModel
   public let action: Action
   public let crash: Crash?
   public let cumulativeLayoutShift: Double?
+  public let customTimings: [String: Int64]?
   public let domComplete: Int64?
   public let domContentLoaded: Int64?
   public let domInteractive: Int64?
@@ -247,6 +259,7 @@ public struct RUMViewEvent: RUMDataModel
   public let loadingTime: Int64?
   public let loadingType: LoadingType?
   public let longTask: LongTask?
+  public var name: String?
   public var referrer: String?
   public let resource: Resource
   public let timeSpent: Int64
@@ -362,6 +375,7 @@ public struct RUMResourceEvent: RUMDataModel
    case synthetics = "synthetics"
  public struct View: Codable
   public let id: String
+  public var name: String?
   public var referrer: String?
   public var url: String
 public struct RUMActionEvent: RUMDataModel
@@ -415,6 +429,7 @@ public struct RUMActionEvent: RUMDataModel
    case synthetics = "synthetics"
  public struct View: Codable
   public let id: String
+  public var name: String?
   public var referrer: String?
   public var url: String
 public struct RUMErrorEvent: RUMDataModel
@@ -483,6 +498,7 @@ public struct RUMErrorEvent: RUMDataModel
    case synthetics = "synthetics"
  public struct View: Codable
   public let id: String
+  public var name: String?
   public var referrer: String?
   public var url: String
 public struct RUMConnectivity: Codable
@@ -531,8 +547,9 @@ public enum RUMErrorSource
 public class RUMMonitor: DDRUMMonitor, RUMCommandSubscriber
  public static func initialize() -> DDRUMMonitor
  override public func startView(viewController: UIViewController,path: String?,attributes: [AttributeKey: AttributeValue])
+ override public func startView(viewController: UIViewController,name: String? = nil,attributes: [AttributeKey: AttributeValue] = [:])
  override public func stopView(viewController: UIViewController,attributes: [AttributeKey: AttributeValue])
- override public func startView(key: String,path: String?,attributes: [AttributeKey: AttributeValue])
+ override public func startView(key: String,name: String?,attributes: [AttributeKey: AttributeValue])
  override public func stopView(key: String,attributes: [AttributeKey: AttributeValue])
  override public func addTiming(name: String)
  override public func addError(message: String,source: RUMErrorSource,stack: String?,attributes: [AttributeKey: AttributeValue],file: StaticString?,line: UInt?)
@@ -541,6 +558,7 @@ public class RUMMonitor: DDRUMMonitor, RUMCommandSubscriber
  override public func startResourceLoading(resourceKey: String,url: URL,attributes: [AttributeKey: AttributeValue])
  override public func startResourceLoading(resourceKey: String,httpMethod: RUMMethod,urlString: String,attributes: [AttributeKey: AttributeValue] = [:])
  override public func addResourceMetrics(resourceKey: String,metrics: URLSessionTaskMetrics,attributes: [AttributeKey: AttributeValue])
+ override public func addResourceMetrics(resourceKey: String,fetch: (start: Date, end: Date),redirection: (start: Date, end: Date)?,dns: (start: Date, end: Date)?,connect: (start: Date, end: Date)?,ssl: (start: Date, end: Date)?,firstByte: (start: Date, end: Date)?,download: (start: Date, end: Date)?,responseSize: Int64?,attributes: [AttributeKey: AttributeValue])
  override public func stopResourceLoading(resourceKey: String,response: URLResponse,size: Int64?,attributes: [AttributeKey: AttributeValue])
  override public func stopResourceLoading(resourceKey: String,statusCode: Int?,kind: RUMResourceType,size: Int64? = nil,attributes: [AttributeKey: AttributeValue] = [:])
  override public func stopResourceLoadingWithError(resourceKey: String,error: Error,response: URLResponse?,attributes: [AttributeKey: AttributeValue])

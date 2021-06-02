@@ -33,7 +33,15 @@ import Foundation
 
 // MARK: - Basic types
 
-extension Data {
+protocol AnyMockable {
+    static func mockAny() -> Self
+}
+
+protocol RandomMockable {
+    static func mockRandom() -> Self
+}
+
+extension Data: AnyMockable, RandomMockable {
     static func mockAny() -> Data {
         return Data()
     }
@@ -44,6 +52,16 @@ extension Data {
 
     static func mock(ofSize size: UInt64) -> Data {
         return mockRepeating(byte: 0x41, times: Int(size))
+    }
+
+    static func mockRandom() -> Data {
+        return mockRepeating(byte: .random(in: 0x00...0xFF), times: 256)
+    }
+}
+
+extension Optional: AnyMockable where Wrapped: AnyMockable {
+    static func mockAny() -> Self {
+        return .some(.mockAny())
     }
 }
 
@@ -71,7 +89,25 @@ extension Array {
     }
 }
 
-extension Date {
+extension Array: RandomMockable where Element: RandomMockable {
+    static func mockRandom() -> [Element] {
+        return Array(repeating: .mockRandom(), count: 10)
+    }
+}
+
+extension Dictionary: AnyMockable where Key: AnyMockable, Value: AnyMockable {
+    static func mockAny() -> Dictionary {
+        return [Key.mockAny(): Value.mockAny()]
+    }
+}
+
+extension Dictionary: RandomMockable where Key: RandomMockable, Value: RandomMockable {
+    static func mockRandom() -> Dictionary {
+        return [Key.mockRandom(): Value.mockRandom()]
+    }
+}
+
+extension Date: AnyMockable {
     static func mockAny() -> Date {
         return Date(timeIntervalSinceReferenceDate: 1)
     }
@@ -99,7 +135,7 @@ extension Date {
     }
 }
 
-extension TimeZone {
+extension TimeZone: AnyMockable {
     static var UTC: TimeZone { TimeZone(abbreviation: "UTC")! }
     static var EET: TimeZone { TimeZone(abbreviation: "EET")! }
     static func mockAny() -> TimeZone { .EET }
@@ -111,7 +147,7 @@ extension Calendar {
     }
 }
 
-extension URL {
+extension URL: AnyMockable, RandomMockable {
     static func mockAny() -> URL {
         return URL(string: "https://www.datadoghq.com")!
     }
@@ -131,12 +167,16 @@ extension URL {
     }
 }
 
-extension String {
+extension String: AnyMockable, RandomMockable {
     static func mockAny() -> String {
         return "abc"
     }
 
-    static func mockRandom(length: Int = 10) -> String {
+    static func mockRandom() -> String {
+        return mockRandom(length: 10)
+    }
+
+    static func mockRandom(length: Int) -> String {
         return mockRandom(
             among: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ",
             length: length
@@ -153,36 +193,48 @@ extension String {
     }
 }
 
-extension Int {
+extension Int: AnyMockable, RandomMockable {
     static func mockAny() -> Int {
         return 0
     }
+
+    static func mockRandom() -> Int {
+        return .random(in: Int.min...Int.max)
+    }
 }
 
-extension Int64 {
+extension Int64: AnyMockable, RandomMockable {
     static func mockAny() -> Int64 { 0 }
     static func mockRandom() -> Int64 { Int64.random(in: Int64.min..<Int64.max) }
 }
 
-extension UInt64 {
+extension UInt64: AnyMockable, RandomMockable {
     static func mockAny() -> UInt64 {
         return 0
     }
+
+    static func mockRandom() -> UInt64 {
+        return .random(in: UInt64.min...UInt64.max)
+    }
 }
 
-extension Bool {
+extension Bool: AnyMockable {
     static func mockAny() -> Bool {
         return false
     }
 }
 
-extension Float {
+extension Float: AnyMockable {
     static func mockAny() -> Float {
         return 0
     }
 }
 
-extension Double {
+extension Double: AnyMockable, RandomMockable {
+    static func mockAny() -> Float {
+        return 0
+    }
+
     static func mockRandom() -> Double {
         return Double.random(in: 0..<Double.greatestFiniteMagnitude)
     }
@@ -279,7 +331,7 @@ extension URLResponse {
     }
 }
 
-extension URLRequest {
+extension URLRequest: AnyMockable {
     static func mockAny() -> URLRequest {
         return URLRequest(url: .mockAny())
     }
@@ -312,6 +364,10 @@ extension URLSession {
 }
 
 extension URLSessionTask {
+    static func mockAny() -> URLSessionTask {
+        return URLSessionTaskMock(request: .mockAny(), response: .mockAny())
+    }
+
     static func mockWith(request: URLRequest, response: HTTPURLResponse) -> URLSessionTask {
         return URLSessionTaskMock(request: request, response: response)
     }

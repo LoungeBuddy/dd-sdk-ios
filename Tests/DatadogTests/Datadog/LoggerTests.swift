@@ -107,11 +107,9 @@ class LoggerTests: XCTestCase {
         logger.info("message 3")
 
         let logMatchers = try LoggingFeature.waitAndReturnLogMatchers(count: 3)
-        // swiftlint:disable trailing_closure
         logMatchers[0].assertDate(matches: { $0 == Date.mockDecember15th2019At10AMUTC() })
         logMatchers[1].assertDate(matches: { $0 == Date.mockDecember15th2019At10AMUTC(addingTimeInterval: 1) })
         logMatchers[2].assertDate(matches: { $0 == Date.mockDecember15th2019At10AMUTC(addingTimeInterval: 2) })
-        // swiftlint:enable trailing_closure
     }
 
     func testSendingLogsWithDifferentLevels() throws {
@@ -145,20 +143,19 @@ class LoggerTests: XCTestCase {
             var description = "Test description"
         }
         let error = TestError()
-        let customAttributes = [ErrorAttributes.message: "custom message"]
 
         let logger = Logger.builder.build()
-        logger.debug("message", error: error, attributes: customAttributes)
-        logger.info("message", error: error, attributes: customAttributes)
-        logger.notice("message", error: error, attributes: customAttributes)
-        logger.warn("message", error: error, attributes: customAttributes)
-        logger.error("message", error: error, attributes: customAttributes)
-        logger.critical("message", error: error, attributes: customAttributes)
+        logger.debug("message", error: error)
+        logger.info("message", error: error)
+        logger.notice("message", error: error)
+        logger.warn("message", error: error)
+        logger.error("message", error: error)
+        logger.critical("message", error: error)
 
         let logMatchers = try LoggingFeature.waitAndReturnLogMatchers(count: 6)
         for matcher in logMatchers {
             matcher.assertValue(forKeyPath: "error.stack", equals: "TestError(description: \"Test description\")")
-            matcher.assertValue(forKeyPath: "error.message", equals: "custom message")
+            matcher.assertValue(forKeyPath: "error.message", equals: "TestError(description: \"Test description\")")
             matcher.assertValue(forKeyPath: "error.kind", equals: "TestError")
         }
     }
@@ -554,7 +551,7 @@ class LoggerTests: XCTestCase {
         logger.info("info message")
 
         // then
-        XCTAssertEqual(output.recordedLog?.level, .warn)
+        XCTAssertEqual(output.recordedLog?.status, .warn)
         try XCTAssertTrue(
             XCTUnwrap(output.recordedLog?.message)
                 .contains("RUM feature is enabled, but no `RUMMonitor` is registered. The RUM integration with Logging will not work.")
@@ -659,7 +656,7 @@ class LoggerTests: XCTestCase {
         logger.info("info message")
 
         // then
-        XCTAssertEqual(output.recordedLog?.level, .warn)
+        XCTAssertEqual(output.recordedLog?.status, .warn)
         try XCTAssertTrue(
             XCTUnwrap(output.recordedLog?.message)
                 .contains("Tracing feature is enabled, but no `Tracer` is registered. The Tracing integration with Logging will not work.")
@@ -824,7 +821,8 @@ class LoggerTests: XCTestCase {
             printFunction.printedMessage,
             "🔥 Datadog SDK usage error: `Datadog.initialize()` must be called prior to `Logger.builder.build()`."
         )
-        XCTAssertTrue(logger.logOutput is NoOpLogOutput)
+        XCTAssertNil(logger.logBuilder)
+        XCTAssertNil(logger.logOutput)
     }
 
     func testGivenLoggingFeatureDisabled_whenInitializingLogger_itPrintsError() throws {
@@ -849,7 +847,8 @@ class LoggerTests: XCTestCase {
             printFunction.printedMessage,
             "🔥 Datadog SDK usage error: `Logger.builder.build()` produces a non-functional logger, as the logging feature is disabled."
         )
-        XCTAssertTrue(logger.logOutput is NoOpLogOutput)
+        XCTAssertNil(logger.logBuilder)
+        XCTAssertNil(logger.logOutput)
 
         try Datadog.deinitializeOrThrow()
     }

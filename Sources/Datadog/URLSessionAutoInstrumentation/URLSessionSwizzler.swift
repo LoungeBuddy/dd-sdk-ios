@@ -70,7 +70,7 @@ internal class URLSessionSwizzler {
             typealias Signature = @convention(block) (URLSession, URLRequest, CompletionHandler?) -> URLSessionDataTask
             swizzle(method) { previousImplementation -> Signature in
                 return { session, urlRequest, completionHandler -> URLSessionDataTask in
-                    guard let interceptor = (session.delegate as? DDURLSessionDelegate)?.interceptor else {
+                    guard let interceptor = (session.delegate as? __URLSessionDelegateProviding)?.ddURLSessionDelegate.interceptor else {
                         return previousImplementation(session, Self.selector, urlRequest, completionHandler)
                     }
                     let task: URLSessionDataTask
@@ -78,6 +78,9 @@ internal class URLSessionSwizzler {
                         var taskReference: URLSessionDataTask?
                         let newCompletionHandler: CompletionHandler = { data, response, error in
                             if let task = taskReference { // sanity check, should always succeed
+                                if let data = data {
+                                    interceptor.taskReceivedData(task: task, data: data)
+                                }
                                 interceptor.taskCompleted(task: task, error: error)
                             }
                             completionHandler?(data, response, error)
@@ -129,7 +132,7 @@ internal class URLSessionSwizzler {
             typealias Signature = @convention(block) (URLSession, URL, CompletionHandler?) -> URLSessionDataTask
             swizzle(method) { previousImplementation -> Signature in
                 return { session, url, completionHandler -> URLSessionDataTask in
-                    guard let interceptor = (session.delegate as? DDURLSessionDelegate)?.interceptor else {
+                    guard let interceptor = (session.delegate as? __URLSessionDelegateProviding)?.ddURLSessionDelegate.interceptor else {
                         return previousImplementation(session, Self.selector, url, completionHandler)
                     }
                     let task: URLSessionDataTask
@@ -137,6 +140,9 @@ internal class URLSessionSwizzler {
                         var taskReference: URLSessionDataTask?
                         let newCompletionHandler: CompletionHandler = { data, response, error in
                             if let task = taskReference { // sanity check, should always succeed
+                                if let data = data {
+                                    interceptor.taskReceivedData(task: task, data: data)
+                                }
                                 interceptor.taskCompleted(task: task, error: error)
                             }
                             completionHandler?(data, response, error)
@@ -183,7 +189,7 @@ internal class URLSessionSwizzler {
             typealias Signature = @convention(block) (URLSession, URLRequest) -> URLSessionDataTask
             swizzle(method) { previousImplementation -> Signature in
                 return { session, urlRequest -> URLSessionDataTask in
-                    guard let interceptor = (session.delegate as? DDURLSessionDelegate)?.interceptor else {
+                    guard let interceptor = (session.delegate as? __URLSessionDelegateProviding)?.ddURLSessionDelegate.interceptor else {
                         return previousImplementation(session, Self.selector, urlRequest)
                     }
                     let newRequest = interceptor.modify(request: urlRequest, session: session)
@@ -227,7 +233,7 @@ internal class URLSessionSwizzler {
             typealias Signature = @convention(block) (URLSession, URL) -> URLSessionDataTask
             swizzle(method) { previousImplementation -> Signature in
                 return { session, url -> URLSessionDataTask in
-                    guard let interceptor = (session.delegate as? DDURLSessionDelegate)?.interceptor else {
+                    guard let interceptor = (session.delegate as? __URLSessionDelegateProviding)?.ddURLSessionDelegate.interceptor else {
                         return previousImplementation(session, Self.selector, url)
                     }
                     let task = previousImplementation(session, Self.selector, url)
